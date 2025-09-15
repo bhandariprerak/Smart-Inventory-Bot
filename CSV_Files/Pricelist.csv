@@ -1,0 +1,9 @@
+price_table_item_id,product_name,category,brand,unit_price,discount_percent,final_price,stock_quantity,description
+P001,Wireless Headphones,Electronics,TechBrand,149.99,0,149.99,50,Premium wireless headphones with noise cancellation
+P002,Smartphone Case,Electronics,ProtectPlus,89.99,10,80.99,120,Durable protective case for smartphones
+P003,Bluetooth Speaker,Electronics,SoundWave,149.50,0,149.50,35,Portable Bluetooth speaker with 12-hour battery
+P004,Laptop Stand,Office,ErgoDesk,199.99,20,159.99,25,Adjustable aluminum laptop stand for ergonomic setup
+P005,Gaming Mouse,Electronics,GamePro,349.99,20,279.99,40,High-precision gaming mouse with RGB lighting
+P006,USB Cable,Electronics,ConnectAll,59.99,0,59.99,200,USB-C to USB-A cable 6 feet length
+P007,Screen Cleaner,Office,CleanTech,0.01,0,0.01,1000,Microfiber screen cleaning cloth
+P008,Phone Charger,Electronics,PowerUp,33.33,0,33.33,85,Fast charging cable for mobile devices

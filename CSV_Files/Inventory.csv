@@ -1,0 +1,13 @@
+IID,CID,order_date,order_status,total_amount,shipping_address,payment_method
+I001,C001,2023-11-15,Delivered,299.99,123 Main St New York NY,Credit Card
+I002,C002,2023-11-18,Shipped,149.50,456 Oak Ave Los Angeles CA,PayPal
+I003,C003,2023-11-20,Processing,89.99,789 Pine St Chicago IL,Credit Card
+I004,C001,2023-11-22,Delivered,199.99,123 Main St New York NY,Debit Card
+I005,C004,2023-11-25,Cancelled,79.99,321 Elm St Houston TX,Credit Card
+I006,C005,2023-11-28,Delivered,349.99,654 Maple Dr Phoenix AZ,PayPal
+I007,C002,2023-12-01,Shipped,229.99,456 Oak Ave Los Angeles CA,Credit Card
+I008,C006,2023-12-03,Processing,119.99,987 Cedar Ln Philadelphia PA,Debit Card
+I009,C007,2023-12-05,Delivered,159.99,147 Birch Rd San Antonio TX,Credit Card
+I010,C003,2023-12-08,Shipped,99.99,789 Pine St Chicago IL,PayPal
+I011,C008,2023-12-10,Processing,279.99,258 Spruce St San Diego CA,Credit Card
+I012,C009,2023-12-12,Delivered,189.99,369 Willow Way Dallas TX,PayPal

@@ -1,0 +1,11 @@
+CID,customer_name,email,phone,address,city,state,registration_date
+C001,John Smith,john.smith@email.com,555-0101,123 Main St,New York,NY,2023-01-15
+C002,Sarah Johnson,sarah.j@email.com,555-0102,456 Oak Ave,Los Angeles,CA,2023-02-20
+C003,Mike Wilson,mike.wilson@email.com,555-0103,789 Pine St,Chicago,IL,2023-03-10
+C004,Emily Davis,emily.davis@email.com,555-0104,321 Elm St,Houston,TX,2023-04-05
+C005,David Brown,david.brown@email.com,555-0105,654 Maple Dr,Phoenix,AZ,2023-05-12
+C006,Lisa Garcia,lisa.garcia@email.com,555-0106,987 Cedar Ln,Philadelphia,PA,2023-06-18
+C007,Tom Martinez,tom.martinez@email.com,555-0107,147 Birch Rd,San Antonio,TX,2023-07-22
+C008,Amy White,amy.white@email.com,555-0108,258 Spruce St,San Diego,CA,2023-08-30
+C009,Chris Lee,chris.lee@email.com,555-0109,369 Willow Way,Dallas,TX,2023-09-14
+C010,Jessica Taylor,jessica.taylor@email.com,555-0110,741 Ash Blvd,San Jose,CA,2023-10-25
