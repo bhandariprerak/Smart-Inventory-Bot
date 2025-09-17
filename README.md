@@ -20,13 +20,21 @@ A comprehensive mobile and web application that provides AI-powered insights int
 ### Demo Queries
 
 ```
-"How many customers do we have?"
-"Name all the customers"
-"Tell me about John"
-"What items do we have in our inventory?"
-"How many headphones do we have?"
-"Generate a sales report"
+How many customers do we have?
+Name all the customers
+Tell me about Melissa Wang
+Number of customers from LA
+What is the status of our inventory?
+Price of blanket
 ```
+### Report generation
+I have an endpoint that generates report in a JSON format
+```
+http://localhost:8000/api/reports/text/executive_summary
+```
+
+Future enhancements for reports:
+Integrate in the UI as a different section where users can ask about specific report generation and analysis.
 
 ### Architecture Highlights
 
