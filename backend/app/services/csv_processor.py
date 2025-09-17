@@ -40,13 +40,15 @@ class ScalableCSVProcessor:
             logger.error(f"Error loading data in Scalable CSV Processor: {str(e)}")
     
     def _create_indexes(self):
-        """Create indexes for faster data access"""
+        """Create indexes for faster data access with new CSV structure"""
         self.indexes = {}
         
         try:
             # Customer index by name and ID
             if 'customer' in self.data:
                 df = self.data['customer']
+                # Create full name first
+                df['customer_name'] = df['FNAME1'] + ' ' + df['LNAME']
                 self.indexes['customer_by_name'] = {
                     name.lower(): idx for idx, name in enumerate(df['customer_name'])
                 }
@@ -54,39 +56,29 @@ class ScalableCSVProcessor:
                     cid: idx for idx, cid in enumerate(df['CID'])
                 }
             
-            # Product index by name and category
+            # Product index by name
             if 'pricelist' in self.data:
                 df = self.data['pricelist']
                 self.indexes['product_by_name'] = {}
-                self.indexes['product_by_category'] = {}
                 
-                for idx, (name, category) in enumerate(zip(df['product_name'], df['category'])):
-                    # Multi-word indexing for product names
+                for idx, name in enumerate(df['name']):  # 'name' not 'product_name'
                     words = name.lower().split()
                     for word in words:
                         if word not in self.indexes['product_by_name']:
                             self.indexes['product_by_name'][word] = []
                         self.indexes['product_by_name'][word].append(idx)
-                    
-                    if category not in self.indexes['product_by_category']:
-                        self.indexes['product_by_category'][category] = []
-                    self.indexes['product_by_category'][category].append(idx)
             
-            # Order index by customer ID and status
+            # Order index by customer ID
             if 'inventory' in self.data:
                 df = self.data['inventory']
                 self.indexes['orders_by_customer'] = {}
-                self.indexes['orders_by_status'] = {}
                 
-                for idx, (cid, status) in enumerate(zip(df['CID'], df['order_status'])):
+                for idx, cid in enumerate(df['CID']):
                     if cid not in self.indexes['orders_by_customer']:
                         self.indexes['orders_by_customer'][cid] = []
                     self.indexes['orders_by_customer'][cid].append(idx)
-                    
-                    if status not in self.indexes['orders_by_status']:
-                        self.indexes['orders_by_status'][status] = []
-                    self.indexes['orders_by_status'][status].append(idx)
             
+
             logger.info("Indexes created successfully for fast data access")
             
         except Exception as e:
@@ -105,112 +97,125 @@ class ScalableCSVProcessor:
         return datetime.now() - self.last_refresh < self.cache_ttl
     
     @lru_cache(maxsize=1000)
-    def get_customers(self, customer_name: str = None, customer_id: str = None, 
-                     page: int = 1, page_size: int = 100) -> List[Dict]:
-        """Get customer information with pagination and caching"""
+    def get_customers(self, customer_name: str = None, customer_id: str = None, page: int = 1, page_size: int = 100) -> List[Dict]:
+        """Get customer information with new CSV structure"""
         try:
-            cache_key = self._get_cache_key('get_customers', 
-                                          customer_name=customer_name, 
-                                          customer_id=customer_id,
-                                          page=page, page_size=page_size)
-            
-            if cache_key in self.query_cache and self._is_cache_valid():
-                return self.query_cache[cache_key]
-            
             df = self.data.get('customer')
             if df is None or df.empty:
                 return []
             
+            # Create full name column
+            df['customer_name'] = df['FNAME1'] + ' ' + df['LNAME']
+            
             result_df = df.copy()
             
-            # Use indexes for faster filtering
-            if customer_name and 'customer_by_name' in self.indexes:
-                name_lower = customer_name.lower()
-                matching_indices = []
-                
-                # Find indices that match the name
-                for indexed_name, idx in self.indexes['customer_by_name'].items():
-                    if name_lower in indexed_name:
-                        matching_indices.append(idx)
-                
-                if matching_indices:
-                    result_df = df.iloc[matching_indices]
-                else:
-                    result_df = df[df['customer_name'].str.contains(customer_name, case=False, na=False)]
+            if customer_name:
+                result_df = result_df[result_df['customer_name'].str.contains(customer_name, case=False, na=False)]
             
-            if customer_id and 'customer_by_id' in self.indexes:
-                if customer_id in self.indexes['customer_by_id']:
-                    idx = self.indexes['customer_by_id'][customer_id]
-                    result_df = df.iloc[[idx]]
-                else:
-                    result_df = df[df['CID'] == customer_id]
+            if customer_id:
+                result_df = result_df[result_df['CID'] == customer_id]
             
             # Apply pagination
             start_idx = (page - 1) * page_size
             end_idx = start_idx + page_size
             result_df = result_df.iloc[start_idx:end_idx]
             
-            result = result_df.to_dict('records')
-            
-            # Cache the result
-            self.query_cache[cache_key] = result
+            # Map to expected format
+            result = []
+            for _, row in result_df.iterrows():
+                result.append({
+                    'CID': row['CID'],
+                    'customer_name': row['customer_name'],
+                    'email': row['EMAIL'],
+                    'phone': 'N/A',  # Not available in new structure
+                    'address': row['ADDRESS'],
+                    'city': row['CITY'],
+                    'state': row['STATE'],
+                    'zip': row['ZIP']
+                })
             
             return result
             
         except Exception as e:
             logger.error(f"Error getting customers: {str(e)}")
             return []
-    
-    def get_orders(self, customer_id: str = None, status: str = None, 
-                   page: int = 1, page_size: int = 100) -> List[Dict]:
-        """Get order information with indexing and pagination"""
+        
+    def get_order_items(self, order_id: str = None, item_name: str = None, page: int = 1, page_size: int = 100) -> List[Dict]:
+        """Get order items/details from detail CSV"""
         try:
-            cache_key = self._get_cache_key('get_orders', 
-                                          customer_id=customer_id, 
-                                          status=status,
-                                          page=page, page_size=page_size)
-            
-            if cache_key in self.query_cache and self._is_cache_valid():
-                return self.query_cache[cache_key]
-            
-            df = self.data.get('inventory')
+            df = self.data.get('detail')
             if df is None or df.empty:
                 return []
             
-            result_indices = None
+            result_df = df.copy()
             
-            # Use indexes for faster filtering
-            if customer_id and 'orders_by_customer' in self.indexes:
-                if customer_id in self.indexes['orders_by_customer']:
-                    result_indices = self.indexes['orders_by_customer'][customer_id]
+            if order_id:
+                result_df = result_df[result_df['IID'] == order_id]
             
-            if status and 'orders_by_status' in self.indexes:
-                status_indices = self.indexes['orders_by_status'].get(status, [])
-                if result_indices is not None:
-                    # Intersection of customer and status indices
-                    result_indices = list(set(result_indices) & set(status_indices))
-                else:
-                    result_indices = status_indices
-            
-            # Apply filters
-            if result_indices is not None:
-                result_df = df.iloc[result_indices]
-            else:
-                result_df = df.copy()
-                if customer_id:
-                    result_df = result_df[result_df['CID'] == customer_id]
-                if status:
-                    result_df = result_df[result_df['order_status'].str.contains(status, case=False, na=False)]
+            if item_name:
+                result_df = result_df[result_df['item_name'].str.contains(item_name, case=False, na=False)]
             
             # Apply pagination
             start_idx = (page - 1) * page_size
             end_idx = start_idx + page_size
             result_df = result_df.iloc[start_idx:end_idx]
             
-            result = result_df.to_dict('records')
+            # Map to expected format
+            result = []
+            for _, row in result_df.iterrows():
+                result.append({
+                    'Item_ID': row['Item_ID'],
+                    'IID': row['IID'],
+                    'item_name': row['item_name'],
+                    'quantity': row['item_count'],
+                    'base_price': row['item_baseprice'],
+                    'department': row['dept_name'],
+                    'pickup_date': row['item_pickup_date'],
+                    'subtotal': row['standardSubtotal']
+                })
             
-            # Cache the result
-            self.query_cache[cache_key] = result
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting order items: {str(e)}")
+            return []
+    
+    def get_orders(self, customer_id: str = None, status: str = None, page: int = 1, page_size: int = 100) -> List[Dict]:
+        """Get order information with new CSV structure"""
+        try:
+            df = self.data.get('inventory')
+            if df is None or df.empty:
+                return []
+            
+            result_df = df.copy()
+            
+            if customer_id:
+                result_df = result_df[result_df['CID'] == customer_id]
+            
+            if status:
+                # Map status to PIF field (Y = delivered, N = pending)
+                if status.lower() == 'delivered':
+                    result_df = result_df[result_df['PIF'] == 'Y']
+                elif status.lower() == 'pending':
+                    result_df = result_df[result_df['PIF'] != 'Y']
+            
+            # Apply pagination
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            result_df = result_df.iloc[start_idx:end_idx]
+            
+            # Map to expected format
+            result = []
+            for _, row in result_df.iterrows():
+                result.append({
+                    'IID': row['IID'],
+                    'CID': row['CID'],
+                    'order_date': row['INDATE'],
+                    'order_status': 'Delivered' if row['PIF'] == 'Y' else 'Pending',
+                    'total_amount': row['SUBTOTAL'],
+                    'ticket_no': row['TICKETNO'],
+                    'category': row['CATEGORY']
+                })
             
             return result
             
@@ -218,66 +223,45 @@ class ScalableCSVProcessor:
             logger.error(f"Error getting orders: {str(e)}")
             return []
     
-    def get_products(self, product_name: str = None, category: str = None,
-                    page: int = 1, page_size: int = 100) -> List[Dict]:
-        """Get product information with smart indexing"""
+    def get_products(self, product_name: str = None, category: str = None, page: int = 1, page_size: int = 100) -> List[Dict]:
+        """Get product information with new CSV structure"""
         try:
-            cache_key = self._get_cache_key('get_products', 
-                                          product_name=product_name, 
-                                          category=category,
-                                          page=page, page_size=page_size)
-            
-            if cache_key in self.query_cache and self._is_cache_valid():
-                return self.query_cache[cache_key]
-            
             df = self.data.get('pricelist')
             if df is None or df.empty:
                 return []
             
-            result_indices = None
+            result_df = df.copy()
             
-            # Use product name index
-            if product_name and 'product_by_name' in self.indexes:
-                name_words = product_name.lower().split()
-                matching_indices = set()
-                
-                for word in name_words:
-                    if word in self.indexes['product_by_name']:
-                        matching_indices.update(self.indexes['product_by_name'][word])
-                    # Also check partial matches
-                    for indexed_word, indices in self.indexes['product_by_name'].items():
-                        if word in indexed_word or indexed_word in word:
-                            matching_indices.update(indices)
-                
-                result_indices = list(matching_indices)
+            if product_name:
+                result_df = result_df[result_df['name'].str.contains(product_name, case=False, na=False)]
             
-            # Use category index
-            if category and 'product_by_category' in self.indexes:
-                category_indices = self.indexes['product_by_category'].get(category, [])
-                if result_indices is not None:
-                    result_indices = list(set(result_indices) & set(category_indices))
-                else:
-                    result_indices = category_indices
-            
-            # Apply filters
-            if result_indices is not None:
-                result_df = df.iloc[result_indices]
-            else:
-                result_df = df.copy()
-                if product_name:
-                    result_df = result_df[result_df['product_name'].str.contains(product_name, case=False, na=False)]
-                if category:
-                    result_df = result_df[result_df['category'].str.contains(category, case=False, na=False)]
+            if category:
+                # No category in new structure, skip this filter
+                pass
             
             # Apply pagination
             start_idx = (page - 1) * page_size
             end_idx = start_idx + page_size
             result_df = result_df.iloc[start_idx:end_idx]
             
-            result = result_df.to_dict('records')
-            
-            # Cache the result
-            self.query_cache[cache_key] = result
+            # Map to expected format
+            result = []
+            for _, row in result_df.iterrows():
+                try:
+                    base_price = float(row['baseprice']) if row['baseprice'] and str(row['baseprice']).strip() != '' else 0.0
+                except (ValueError, TypeError):
+                    base_price = 0.0
+            for _, row in result_df.iterrows():
+                result.append({
+                    'price_table_item_id': row['item_id'],
+                    'product_name': row['name'],
+                    'category': 'Dry Cleaning',  # Default category
+                    'unit_price': base_price,
+                    'final_price': row['baseprice'],
+                    'stock_quantity': 'Available',  # No stock info in new structure
+                    'brand': 'N/A',
+                    'description': f"{row['name']} - Base price: ${row['baseprice']}"
+                })
             
             return result
             
@@ -422,16 +406,20 @@ class ScalableCSVProcessor:
                     # Specific stats for each dataset
                     if name == 'customer':
                         stats[name]["total_customers"] = len(df)
-                        stats[name]["states"] = df['state'].value_counts().to_dict()
+                        stats[name]["states"] = df['STATE'].value_counts().to_dict()  # Fixed column name
                     elif name == 'inventory':
                         stats[name]["total_orders"] = len(df)
-                        stats[name]["order_statuses"] = df['order_status'].value_counts().to_dict()
-                        stats[name]["revenue"] = df['total_amount'].astype(float).sum()
+                        # Map PIF to status
+                        pif_counts = df['PIF'].value_counts().to_dict()
+                        stats[name]["order_statuses"] = {
+                            'Delivered': pif_counts.get('Y', 0),
+                            'Pending': pif_counts.get('', 0) + pif_counts.get('N', 0)
+                        }
+                        stats[name]["revenue"] = df['SUBTOTAL'].astype(float).sum()
                     elif name == 'pricelist':
                         stats[name]["total_products"] = len(df)
-                        stats[name]["categories"] = df['category'].value_counts().to_dict()
-                        stats[name]["total_inventory_value"] = (df['stock_quantity'].astype(int) * df['final_price'].astype(float)).sum()
-            
+                        stats[name]["categories"] = {'Dry Cleaning': len(df)}  # All items are dry cleaning
+
             # Add performance metrics
             stats["performance"] = {
                 "cache_size": len(self.query_cache),

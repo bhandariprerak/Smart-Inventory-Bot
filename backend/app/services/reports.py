@@ -5,12 +5,26 @@ import logging
 from datetime import datetime
 import base64
 import io
+import math
 
 logger = logging.getLogger(__name__)
 
 class VisualReportsService:
     def __init__(self, csv_processor):
         self.csv_processor = csv_processor
+    
+    def clean_float_values(self, data):
+        """Clean NaN and infinite float values for JSON serialization"""
+        if isinstance(data, dict):
+            return {k: self.clean_float_values(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self.clean_float_values(item) for item in data]
+        elif isinstance(data, float):
+            if math.isnan(data) or math.isinf(data):
+                return 0.0
+            return data
+        else:
+            return data
     
     def generate_dashboard_data(self) -> Dict[str, Any]:
         """Generate data for dashboard charts and metrics"""
@@ -33,7 +47,7 @@ class VisualReportsService:
             # Performance metrics
             performance_metrics = self._get_performance_metrics()
             
-            return {
+            result = {
                 "overview": {
                     "total_customers": len(customers),
                     "total_orders": len(orders),
@@ -47,6 +61,8 @@ class VisualReportsService:
                 "performance_metrics": performance_metrics,
                 "chart_data": self._generate_chart_data(customers, orders, products)
             }
+
+            return self.clean_float_values(result)
             
         except Exception as e:
             logger.error(f"Error generating dashboard data: {str(e)}")

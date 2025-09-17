@@ -94,6 +94,30 @@ class AIFirstQueryProcessor:
         except Exception as e:
             logger.error(f"Error getting customer names: {str(e)}")
             return []
+
+    def get_all_customer_names_from_data(csv_processor) -> List[str]:
+        """Get all customer first names dynamically from CSV"""
+        try:
+            customers = csv_processor.get_customers()
+            return [c['customer_name'].split()[0].lower() for c in customers]
+        except:
+            return []
+
+    def get_all_states_from_data(csv_processor) -> List[str]:
+        """Get all unique states from customer data"""
+        try:
+            customers = csv_processor.get_customers()
+            return list(set(c.get('state', '') for c in customers if c.get('state')))
+        except:
+            return []
+
+    def get_payment_methods_from_data(csv_processor) -> List[str]:
+        """Get all payment methods from customer data"""
+        try:
+            customers = csv_processor.get_customers()
+            return list(set(c.get('pay_method', '').lower() for c in customers if c.get('pay_method')))
+        except:
+            return []
     
     def get_all_product_terms(self) -> List[str]:
         """Dynamically get all product terms from current data"""
@@ -140,7 +164,14 @@ class AIFirstQueryProcessor:
             """
             
             analysis = self.gemini_service.analyze_query(user_message, enhanced_context)
-            
+
+            # Handle string responses from Gemini
+            if isinstance(analysis, str):
+                return {"error": analysis}
+                
+            if not isinstance(analysis, dict):
+                return {"error": "Invalid response format from Gemini"}
+
             # Add dynamic entity extraction
             analysis['dynamic_entities'] = self.extract_dynamic_entities(user_message)
             
@@ -318,6 +349,14 @@ class AIFirstQueryProcessor:
                     result["message"] = f"Current inventory: {', '.join(inventory_summary)}"
                     result["query_executed"] = "inventory_status"
             
+            elif intent == "items" or "item" in intent:
+                if entities["product_terms"]:
+                    # Search for specific items
+                    items = ai_processor.get_order_items(item_name=entities["product_terms"][0])
+                    result["data"] = items
+                    result["message"] = f"Found {len(items)} {entities['product_terms'][0]} items processed"
+                    result["query_executed"] = "item_search"
+            
             return result
             
         except Exception as e:
@@ -390,6 +429,33 @@ if csv_processor and gemini_service:
     ai_processor = AIFirstQueryProcessor(csv_processor, gemini_service)
     logger.info("AI-first query processor initialized successfully")
 
+# Dynamic customer name extraction
+def get_all_customer_names_from_data(csv_processor) -> List[str]:
+    """Get all customer first names dynamically from CSV"""
+    try:
+        customers = csv_processor.get_customers()
+        return [c['customer_name'].split()[0].lower() for c in customers]
+    except:
+        return []
+
+# Dynamic state extraction  
+def get_all_states_from_data(csv_processor) -> List[str]:
+    """Get all unique states from customer data"""
+    try:
+        customers = csv_processor.get_customers()
+        return list(set(c.get('state', '') for c in customers if c.get('state')))
+    except:
+        return []
+
+# Dynamic payment methods
+def get_payment_methods_from_data(csv_processor) -> List[str]:
+    """Get all payment methods from customer data"""
+    try:
+        customers = csv_processor.get_customers()
+        return list(set(c.get('pay_method', '').lower() for c in customers if c.get('pay_method')))
+    except:
+        return []
+
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(chat_message: ChatMessage):
@@ -420,7 +486,6 @@ async def chat_endpoint(chat_message: ChatMessage):
                 data_found=True
             )
         
-        # Use AI to analyze the query
         # Use AI to analyze the query
         ai_analysis = ai_processor.analyze_with_ai(user_message)
         
@@ -499,6 +564,50 @@ async def chat_endpoint(chat_message: ChatMessage):
                 inventory_summary = [f"{p['stock_quantity']} {p['product_name']}" for p in products]
                 return ChatResponse(response=f"Current inventory: {', '.join(inventory_summary)}", status="success", query_type="inventory_status", data_found=True)
             
+            # pricing and state queries handler:
+
+            # Price queries
+            elif "price" in user_lower and ("of" in user_lower or "for" in user_lower):
+                products = csv_processor.get_products()
+                for product in products:
+                    product_words = product['product_name'].lower().split()
+                    if any(word in user_lower for word in product_words):
+                        return ChatResponse(response=f"{product['product_name']} base price is ${product['unit_price']}", status="success", query_type="product_price", data_found=True)
+                return ChatResponse(response="Product not found in our inventory.", status="success", query_type="product_help", data_found=True)
+            
+            # State-based customer queries
+            elif "customers" in user_lower and ("from" in user_lower or "in" in user_lower):
+                available_states = get_all_states_from_data(csv_processor)
+                found_state = None
+                
+                for state in available_states:
+                    if state.upper() in user_message.upper():
+                        found_state = state
+                        break
+                
+                if found_state:
+                    customers = csv_processor.get_customers()
+                    state_customers = [c for c in customers if c.get('state') == found_state]
+                    return ChatResponse(response=f"We have {len(state_customers)} customers from {found_state}.", status="success", query_type="customer_count_by_state", data_found=True)
+                else:
+                    return ChatResponse(response=f"Available states: {', '.join(available_states)}", status="success", query_type="state_help", data_found=True)
+            
+            # Payment method queries
+            elif "paid" in user_lower or "payment" in user_lower:
+                payment_methods = get_payment_methods_from_data(csv_processor)
+                found_method = None
+                
+                for method in payment_methods:
+                    if method in user_lower:
+                        found_method = method
+                        break
+                
+                if found_method:
+                    customers = csv_processor.get_customers()
+                    payment_customers = [c for c in customers if c.get('pay_method', '').lower() == found_method.lower()]
+                    return ChatResponse(response=f"We have {len(payment_customers)} customers who use {found_method} payment.", status="success", query_type="customer_by_payment", data_found=True)
+
+            ### end of pricing and state query handler
             # Default fallback
             else:
                 return ChatResponse(response="I can help with: customer information ('tell me about John'), customer counts ('how many customers'), inventory status ('what does inventory look like'), and product quantities ('how many headphones').", status="success", query_type="fallback", data_found=False)

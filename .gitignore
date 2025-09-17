@@ -1,2 +1,6 @@
 backend/.env
 backend/credentials/service-account.json
+node_modules
+./backedn/venv
+.expo
+venv

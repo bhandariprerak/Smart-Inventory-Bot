@@ -95,8 +95,20 @@ class GoogleDriveService:
                 # Download and cache the file
                 df = self.download_csv_file(file_id, file_name)
                 if df is not None:
-                    # Remove .csv extension for key
-                    key = file_name.replace('.csv', '').lower()
+                    # Map file names to expected keys
+                    key = file_name.lower()
+                    if 'customer' in key:
+                        key = 'customer'
+                    elif 'inventory' in key:
+                        key = 'inventory' 
+                    elif 'detail' in key:
+                        key = 'detail'
+                    elif 'pricelist' in key:
+                        key = 'pricelist'
+                    else:
+                        key = file_name.replace('.csv', '').lower()
+                    
+                    # Actually store the data (this was missing!)
                     csv_data[key] = df
                     self.csv_cache[key] = df
             
